@@ -106,7 +106,7 @@ fn main() -> anyhow::Result<()> {
         usage: wgpu::BufferUsages::VERTEX,
     });
 
-    let mut fire = Fire::new(150, 75, 1. / 60.);
+    let mut fire = Fire::new(250, 150, 1. / 120.);
     let fire_tex = fire.create_texture(&device);
     let fire_tex_view = fire_tex.create_view(&wgpu::TextureViewDescriptor::default());
     let closest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
