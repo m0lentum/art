@@ -352,6 +352,7 @@ dependencies = [
  "enterpolation",
  "futures",
  "itertools",
+ "lazy_static",
  "palette",
  "png",
  "rand",

@@ -1,4 +1,7 @@
-use itertools::iproduct;
+use enterpolation::{linear::Linear, Curve};
+use itertools::{iproduct, izip};
+use lazy_static::lazy_static;
+use palette::{IntoColor, LinSrgba, Srgba};
 use rand::Rng;
 
 /// "Doom fire"
@@ -7,10 +10,42 @@ use rand::Rng;
 pub struct Fire {
     pub width: usize,
     pub height: usize,
-    // heat value in the range [0, 1] for every pixel in the fire
-    heat_buf: Vec<f32>,
     // average amount of cooling per row propagated upwards
     pub cooling_rate: f32,
+    // heat value in the range [0, 1] for every pixel in the fire
+    heat_buf: Vec<f32>,
+}
+
+// generate a lookup table for the color palette
+const PALETTE_SIZE: usize = 32;
+lazy_static! {
+    static ref PALETTE_LUT: [[u8; 4]; PALETTE_SIZE] = {
+        let curve = Linear::builder()
+            .elements([
+                Srgba::new(0., 0., 0., 0.).into_linear(),
+                Srgba::new(0.250, 0.015, 0., 0.8).into_linear(),
+                Srgba::new(0.450, 0.170, 0.070, 1.).into_linear(),
+                Srgba::new(0.850, 0.506, 0.161, 1.).into_linear(),
+                Srgba::new(0.960, 0.812, 0.154, 1.).into_linear(),
+                Srgba::new(1., 1., 1., 1.).into_linear(),
+            ])
+            .knots([0., 0.3, 0.5, 0.8, 0.95, 1.])
+            .build()
+            .unwrap();
+        let vals = curve.take(PALETTE_SIZE);
+        let mut lut = [[0; 4]; PALETTE_SIZE];
+        for (color, lut_val) in izip!(vals, lut.iter_mut()) {
+            let c_lin: LinSrgba = color.into_color();
+            let as_u8 = |channel: f32| (u8::MAX as f32 * channel).round() as u8;
+            *lut_val = [
+                as_u8(c_lin.red),
+                as_u8(c_lin.green),
+                as_u8(c_lin.blue),
+                as_u8(c_lin.alpha),
+            ];
+        }
+        lut
+    };
 }
 
 impl Fire {
@@ -25,8 +60,8 @@ impl Fire {
         Self {
             width,
             height,
-            heat_buf,
             cooling_rate,
+            heat_buf,
         }
     }
 
@@ -72,8 +107,8 @@ impl Fire {
             .heat_buf
             .iter()
             .map(|&temp| {
-                let temp_u8 = (temp * 255.0).round() as u8;
-                [temp_u8, 0, 0, 255]
+                let lut_idx = ((temp * PALETTE_SIZE as f32) as usize).min(PALETTE_SIZE - 1);
+                PALETTE_LUT[lut_idx]
             })
             .collect();
 
