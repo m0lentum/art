@@ -6,3 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.80"
+bytemuck = { version = "1.14.0", features = ["derive"] }
+encase = { version = "0.6.1", features = ["nalgebra"] }
+enterpolation = "0.2.1"
+futures = "0.3.29"
+palette = "0.7.3"
+png = "0.17.13"
+wgpu = "0.18.0"
+winit = "0.28.7"
+
+[profile.dev.package."*"]
+opt-level = 3
