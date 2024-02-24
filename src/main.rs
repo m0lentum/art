@@ -1,6 +1,7 @@
+use std::time::Instant;
+
 use anyhow::anyhow;
 use futures::executor::block_on;
-use std::time::Instant;
 use wgpu::util::DeviceExt;
 use winit::{
     event::{Event, VirtualKeyCode, WindowEvent},
@@ -8,8 +9,13 @@ use winit::{
     window::WindowBuilder,
 };
 
+//
+
 mod pipelines;
 use pipelines::{load_png_texture, TexturePipeline};
+
+mod fire;
+use fire::Fire;
 
 // constants for quick globally accessible configuration
 
@@ -78,9 +84,6 @@ fn main() -> anyhow::Result<()> {
     let characters_tex = load_png_texture(&device, &queue, "characters.png")?;
     let characters_tex_view = characters_tex.create_view(&wgpu::TextureViewDescriptor::default());
     let filtering_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
         mag_filter: wgpu::FilterMode::Linear,
         min_filter: wgpu::FilterMode::Linear,
         ..Default::default()
@@ -103,18 +106,68 @@ fn main() -> anyhow::Result<()> {
         usage: wgpu::BufferUsages::VERTEX,
     });
 
+    let mut fire = Fire::new(100, 50, 1. / 40.);
+    let fire_tex = fire.create_texture(&device);
+    let fire_tex_view = fire_tex.create_view(&wgpu::TextureViewDescriptor::default());
+    let closest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        mag_filter: wgpu::FilterMode::Nearest,
+        min_filter: wgpu::FilterMode::Nearest,
+        ..Default::default()
+    });
+    let fire_bind_group = tex_pl.create_bind_group(&device, &fire_tex_view, &closest_sampler);
+
+    // rectangular quad for the fire
+    let fire_base_y = -0.5;
+    // height that makes square pixels at 4:3 aspect ratio
+    let fire_height = (2. / fire.width as f32) * fire.height as f32 * 4. / 3.;
+    let fire_top_y = fire_base_y + fire_height;
+    let fire_verts = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: None,
+        contents: bytemuck::cast_slice(&[
+            // position         tex_coords
+            [[-1., fire_base_y], [0., 1.]],
+            [[1., fire_base_y], [1., 1.]],
+            [[1., fire_top_y], [1., 0.]],
+            [[-1., fire_base_y], [0., 1.]],
+            [[1., fire_top_y], [1., 0.]],
+            [[-1., fire_top_y], [0., 0.]],
+        ]),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    let fire_dt = 1. / 20.;
+
     //
     // run event loop
     //
 
-    let start_t = Instant::now();
+    // frame timing for the fire simulation
+    let mut frame_start_t = Instant::now();
+    let mut time_in_frame = 0.;
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_poll();
         match event {
             //
-            // render
+            // render loop
             //
             Event::MainEventsCleared => {
+                // simulate fire
+
+                let since_last_draw = frame_start_t.elapsed().as_secs_f64();
+                time_in_frame += since_last_draw;
+                let mut fire_updated = false;
+                // limit maximum steps per frame to avoid spiral of death
+                for _ in 0..4 {
+                    if time_in_frame < fire_dt {
+                        break;
+                    }
+                    fire.propagate();
+                    fire_updated = true;
+                    time_in_frame -= fire_dt;
+                }
+
+                frame_start_t = Instant::now();
+
                 // setup
 
                 let surface_tex = surface
@@ -140,8 +193,16 @@ fn main() -> anyhow::Result<()> {
 
                 // draw
 
-                let t = start_t.elapsed().as_secs_f32();
+                if fire_updated {
+                    fire.write_texture(&queue, &fire_tex);
+                }
+
                 pass.set_pipeline(&tex_pl.pipeline);
+
+                pass.set_bind_group(0, &fire_bind_group, &[]);
+                pass.set_vertex_buffer(0, fire_verts.slice(..));
+                pass.draw(0..6, 0..1);
+
                 pass.set_bind_group(0, &characters_bind_group, &[]);
                 pass.set_vertex_buffer(0, characters_verts.slice(..));
                 pass.draw(0..6, 0..1);
