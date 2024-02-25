@@ -109,12 +109,12 @@ fn main() -> anyhow::Result<()> {
     let mut fire = Fire::new(250, 150, 1. / 120.);
     let fire_tex = fire.create_texture(&device);
     let fire_tex_view = fire_tex.create_view(&wgpu::TextureViewDescriptor::default());
-    let closest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+    let nearest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         mag_filter: wgpu::FilterMode::Nearest,
         min_filter: wgpu::FilterMode::Nearest,
         ..Default::default()
     });
-    let fire_bind_group = tex_pl.create_bind_group(&device, &fire_tex_view, &closest_sampler);
+    let fire_bind_group = tex_pl.create_bind_group(&device, &fire_tex_view, &nearest_sampler);
 
     // rectangular quad for the fire
     let fire_base_y = -0.5;
@@ -131,6 +131,25 @@ fn main() -> anyhow::Result<()> {
             [[-1., fire_base_y], [0., 1.]],
             [[1., fire_top_y], [1., 0.]],
             [[-1., fire_top_y], [0., 0.]],
+        ]),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    // reflection squished to look in perspective and smoothed by a filtering sampler
+    let fire_reflection_bind_group =
+        tex_pl.create_bind_group(&device, &fire_tex_view, &filtering_sampler);
+
+    let refl_bottom_y = fire_base_y - 0.4 * fire_height;
+    let fire_reflection_verts = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: None,
+        contents: bytemuck::cast_slice(&[
+            // position         tex_coords
+            [[-1., fire_base_y], [0., 1.]],
+            [[1., fire_base_y], [1., 1.]],
+            [[1., refl_bottom_y], [1., 0.]],
+            [[-1., fire_base_y], [0., 1.]],
+            [[1., refl_bottom_y], [1., 0.]],
+            [[-1., refl_bottom_y], [0., 0.]],
         ]),
         usage: wgpu::BufferUsages::VERTEX,
     });
@@ -201,6 +220,10 @@ fn main() -> anyhow::Result<()> {
 
                 pass.set_bind_group(0, &fire_bind_group, &[]);
                 pass.set_vertex_buffer(0, fire_verts.slice(..));
+                pass.draw(0..6, 0..1);
+
+                pass.set_bind_group(0, &fire_reflection_bind_group, &[]);
+                pass.set_vertex_buffer(0, fire_reflection_verts.slice(..));
                 pass.draw(0..6, 0..1);
 
                 pass.set_bind_group(0, &characters_bind_group, &[]);
