@@ -22,12 +22,12 @@ lazy_static! {
     static ref PALETTE_LUT: [[u8; 4]; PALETTE_SIZE] = {
         let curve = Linear::builder()
             .elements([
-                Srgba::new(0., 0., 0., 0.).into_linear(),
-                Srgba::new(0.250, 0.015, 0., 0.8).into_linear(),
-                Srgba::new(0.450, 0.170, 0.070, 1.).into_linear(),
-                Srgba::new(0.850, 0.506, 0.161, 1.).into_linear(),
-                Srgba::new(0.960, 0.812, 0.154, 1.).into_linear(),
-                Srgba::new(1., 1., 1., 1.).into_linear(),
+                Srgba::new(0., 0., 0., 0.3).into_linear(),
+                Srgba::new(0.250, 0.015, 0., 0.5).into_linear(),
+                Srgba::new(0.450, 0.170, 0.070, 0.7).into_linear(),
+                Srgba::new(0.850, 0.506, 0.161, 0.8).into_linear(),
+                Srgba::new(0.960, 0.812, 0.154, 0.8).into_linear(),
+                Srgba::new(1., 1., 1., 0.8).into_linear(),
             ])
             .knots([0., 0.3, 0.5, 0.8, 0.95, 1.])
             .build()

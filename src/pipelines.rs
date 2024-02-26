@@ -85,11 +85,13 @@ impl TexturePipeline {
                     array_stride: 4 * 2 * 2,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[
+                        // position
                         wgpu::VertexAttribute {
                             format: wgpu::VertexFormat::Float32x2,
                             offset: 0,
                             shader_location: 0,
                         },
+                        // texture coords
                         wgpu::VertexAttribute {
                             format: wgpu::VertexFormat::Float32x2,
                             offset: 4 * 2,
@@ -146,5 +148,81 @@ impl TexturePipeline {
                 },
             ],
         })
+    }
+}
+
+pub struct VertexColorPipeline {
+    pub pipeline: wgpu::RenderPipeline,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ColoredVertex {
+    pub pos: [f32; 2],
+    pub col: [f32; 4],
+}
+
+impl VertexColorPipeline {
+    pub fn new(device: &wgpu::Device) -> Self {
+        let label = Some("vertex colors");
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label,
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
+                "./shaders/vert_colors.wgsl"
+            ))),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label,
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label,
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: 2 * 4 + 4 * 4,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        // position
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x2,
+                            offset: 0,
+                            shader_location: 0,
+                        },
+                        // color
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x4,
+                            offset: 4 * 2,
+                            shader_location: 1,
+                        },
+                    ],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: super::SWAPCHAIN_FORMAT,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: super::MULTISAMPLE_STATE,
+            multiview: None,
+        });
+
+        Self { pipeline }
     }
 }

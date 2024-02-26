@@ -12,10 +12,13 @@ use winit::{
 //
 
 mod pipelines;
-use pipelines::{load_png_texture, TexturePipeline};
+use pipelines::{load_png_texture, TexturePipeline, VertexColorPipeline};
 
 mod fire;
 use fire::Fire;
+
+mod triangle_grid;
+use triangle_grid::TriangleGrid;
 
 // constants for quick globally accessible configuration
 
@@ -79,6 +82,9 @@ fn main() -> anyhow::Result<()> {
     //
     // pipelines and textures
     //
+
+    let color_pl = VertexColorPipeline::new(&device);
+    let mut background_grid = TriangleGrid::generate(&device);
 
     let tex_pl = TexturePipeline::new(&device);
     let characters_tex = load_png_texture(&device, &queue, "characters.png")?;
@@ -163,6 +169,8 @@ fn main() -> anyhow::Result<()> {
     // frame timing for the fire simulation
     let mut frame_start_t = Instant::now();
     let mut time_in_frame = 0.;
+    // global time for time-dependent effects
+    let start_t = Instant::now();
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_poll();
         match event {
@@ -212,9 +220,17 @@ fn main() -> anyhow::Result<()> {
 
                 // draw
 
+                let t = start_t.elapsed().as_secs_f32();
+
                 if fire_updated {
                     fire.write_texture(&queue, &fire_tex);
                 }
+
+                background_grid.update(&queue, t);
+
+                pass.set_pipeline(&color_pl.pipeline);
+                pass.set_vertex_buffer(0, background_grid.vertex_buf.slice(..));
+                pass.draw(0..background_grid.vertex_count, 0..1);
 
                 pass.set_pipeline(&tex_pl.pipeline);
 
