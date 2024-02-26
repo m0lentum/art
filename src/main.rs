@@ -23,8 +23,7 @@ use triangle_grid::TriangleGrid;
 // constants for quick globally accessible configuration
 
 const SWAPCHAIN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
-// TODO: actually set up msaa
-const MSAA_SAMPLES: u32 = 1;
+const MSAA_SAMPLES: u32 = 4;
 const MULTISAMPLE_STATE: wgpu::MultisampleState = wgpu::MultisampleState {
     count: MSAA_SAMPLES,
     mask: !0,
@@ -78,6 +77,28 @@ fn main() -> anyhow::Result<()> {
         view_formats: vec![],
     };
     surface.configure(&device, &surface_config);
+
+    fn create_msaa_texture(
+        device: &wgpu::Device,
+        window_size: winit::dpi::PhysicalSize<u32>,
+    ) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("screen multisample"),
+            size: wgpu::Extent3d {
+                width: window_size.width,
+                height: window_size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: MSAA_SAMPLES,
+            dimension: wgpu::TextureDimension::D2,
+            format: SWAPCHAIN_FORMAT,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        })
+    }
+
+    let mut msaa_texture = create_msaa_texture(&device, initial_window_size);
 
     //
     // pipelines and textures
@@ -203,13 +224,14 @@ fn main() -> anyhow::Result<()> {
                 let surface_view = surface_tex
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
+                let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let mut encoder =
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &surface_view,
-                        resolve_target: None,
+                        view: &msaa_view,
+                        resolve_target: Some(&surface_view),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                             store: wgpu::StoreOp::Store,
@@ -263,6 +285,7 @@ fn main() -> anyhow::Result<()> {
                     surface_config.width = new_size.width;
                     surface_config.height = new_size.height;
                     surface.configure(&device, &surface_config);
+                    msaa_texture = create_msaa_texture(&device, new_size);
                 }
                 WindowEvent::KeyboardInput {
                     input:
