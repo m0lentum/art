@@ -23,10 +23,49 @@ fn vs_main(
     return out;
 }
 
+// CRT postprocessing effect based on
+// https://babylonjs.medium.com/retro-crt-shader-a-post-processing-effect-study-1cb3f783afbc
+
+fn distort_uv(in_uv: vec2<f32>) -> vec2<f32> {
+    let curvature = 3.;
+
+    var uv = in_uv;
+    uv = uv * 2.0 - 1.0;
+    let offset: vec2<f32> = abs(uv.yx) / curvature;
+    uv = uv + uv * offset * offset;
+    uv = uv * 0.5 + 0.5;
+    return uv;
+}
+
+fn scanline_coef(coord: f32, resolution: f32) -> f32 {
+    let opacity = 0.5;
+    return pow(
+	(0.5 * sin(coord * resolution * 3.14159 * 2.) + 0.5) * 0.9 + 0.1,
+	opacity
+    );
+}
+
+fn vignette_coef(uv: vec2<f32>, screen_size: vec2<f32>) -> f32 {
+    let intensity = (screen_size.x / 16.0) * uv.x * uv.y * (1. - uv.x) * (1. - uv.y);
+    return clamp(intensity, 0., 1.);
+}
+
 @fragment
 fn fs_main(
     in: VertexOutput
 ) -> @location(0) vec4<f32> {
-    let screen_color = textureSample(gbuf_tex, gbuf_samp, in.uv);
-    return screen_color;
+    let screen_size = vec2<f32>(textureDimensions(gbuf_tex));
+    let distorted_uv = distort_uv(in.uv);
+    let screen_color = textureSample(gbuf_tex, gbuf_samp, distorted_uv);
+
+    if distorted_uv.x < 0. || distorted_uv.x > 1. || distorted_uv.y < 0. || distorted_uv.y > 1. {
+	return vec4<f32>(0., 0., 0., 1.);
+    }
+
+    let scanline = scanline_coef(distorted_uv.y, screen_size.x / 8.);
+    let vignette = vignette_coef(in.uv, screen_size);
+    let brightness_boost = 1.5;
+
+    let dimmed_color = vec4<f32>(brightness_boost * scanline * vignette * screen_color.rgb, 1.);
+    return dimmed_color;
 }
