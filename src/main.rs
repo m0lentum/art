@@ -12,7 +12,7 @@ use winit::{
 //
 
 mod pipelines;
-use pipelines::{load_png_texture, TexturePipeline, VertexColorPipeline};
+use pipelines::{load_png_texture, PostprocessPipeline, TexturePipeline, VertexColorPipeline};
 
 mod fire;
 use fire::Fire;
@@ -78,19 +78,20 @@ fn main() -> anyhow::Result<()> {
     };
     surface.configure(&device, &surface_config);
 
-    fn create_msaa_texture(
+    fn create_screen_texture(
         device: &wgpu::Device,
         window_size: winit::dpi::PhysicalSize<u32>,
+        is_msaa: bool,
     ) -> wgpu::Texture {
         device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("screen multisample"),
+            label: None,
             size: wgpu::Extent3d {
                 width: window_size.width,
                 height: window_size.height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: MSAA_SAMPLES,
+            sample_count: if is_msaa { MSAA_SAMPLES } else { 1 },
             dimension: wgpu::TextureDimension::D2,
             format: SWAPCHAIN_FORMAT,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -98,7 +99,10 @@ fn main() -> anyhow::Result<()> {
         })
     }
 
-    let mut msaa_texture = create_msaa_texture(&device, initial_window_size);
+    // multisampled texture
+    let mut msaa_texture = create_screen_texture(&device, initial_window_size, true);
+    // main image is draw into a gbuffer for postprocessing
+    let mut gbuffer = create_screen_texture(&device, initial_window_size, false);
 
     //
     // pipelines and textures
@@ -183,6 +187,8 @@ fn main() -> anyhow::Result<()> {
 
     let fire_dt = 1. / 20.;
 
+    let postprocess_pl = PostprocessPipeline::new(&device);
+
     //
     // run event loop
     //
@@ -225,13 +231,16 @@ fn main() -> anyhow::Result<()> {
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
                 let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let gbuf_view = gbuffer.create_view(&wgpu::TextureViewDescriptor::default());
+                let gbuf_bind_group =
+                    postprocess_pl.create_bind_group(&device, &gbuf_view, &filtering_sampler);
                 let mut encoder =
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: &msaa_view,
-                        resolve_target: Some(&surface_view),
+                        resolve_target: Some(&gbuf_view),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                             store: wgpu::StoreOp::Store,
@@ -268,9 +277,29 @@ fn main() -> anyhow::Result<()> {
                 pass.set_vertex_buffer(0, characters_verts.slice(..));
                 pass.draw(0..6, 0..1);
 
-                // finalize
+                // postprocessing pass
 
                 drop(pass);
+
+                let mut postprocess_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &surface_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    ..Default::default()
+                });
+
+                postprocess_pass.set_pipeline(&postprocess_pl.pipeline);
+                postprocess_pass.set_bind_group(0, &gbuf_bind_group, &[]);
+                postprocess_pass.draw(0..3, 0..1);
+
+                // finalize
+
+                drop(postprocess_pass);
                 queue.submit(Some(encoder.finish()));
                 surface_tex.present();
             }
@@ -285,7 +314,8 @@ fn main() -> anyhow::Result<()> {
                     surface_config.width = new_size.width;
                     surface_config.height = new_size.height;
                     surface.configure(&device, &surface_config);
-                    msaa_texture = create_msaa_texture(&device, new_size);
+                    msaa_texture = create_screen_texture(&device, new_size, true);
+                    gbuffer = create_screen_texture(&device, new_size, false);
                 }
                 WindowEvent::KeyboardInput {
                     input:
