@@ -25,6 +25,7 @@ fn vs_main(
 
 // CRT postprocessing effect based on
 // https://babylonjs.medium.com/retro-crt-shader-a-post-processing-effect-study-1cb3f783afbc
+// plus chromatic aberration and some other personal touches
 
 fn distort_uv(in_uv: vec2<f32>) -> vec2<f32> {
     let curvature = 3.;
@@ -56,7 +57,19 @@ fn fs_main(
 ) -> @location(0) vec4<f32> {
     let screen_size = vec2<f32>(textureDimensions(gbuf_tex));
     let distorted_uv = distort_uv(in.uv);
-    let screen_color = textureSample(gbuf_tex, gbuf_samp, distorted_uv);
+
+    // different channels offset slightly for chromatic aberration
+    let aberration_intensity = 0.001;
+    let red_uv = distorted_uv + aberration_intensity * vec2<f32>(1., 0.);
+    let green_uv = distorted_uv + aberration_intensity * vec2<f32>(-0.8, 0.6);
+    let blue_uv = distorted_uv + aberration_intensity * vec2<f32>(-0.8, -0.6);
+
+    let screen_color = vec4<f32>(
+    	textureSample(gbuf_tex, gbuf_samp, red_uv).r,
+    	textureSample(gbuf_tex, gbuf_samp, green_uv).g,
+    	textureSample(gbuf_tex, gbuf_samp, blue_uv).b,
+	1.,
+    );
 
     if distorted_uv.x < 0. || distorted_uv.x > 1. || distorted_uv.y < 0. || distorted_uv.y > 1. {
 	return vec4<f32>(0., 0., 0., 1.);
