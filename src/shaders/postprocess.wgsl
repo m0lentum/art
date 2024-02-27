@@ -3,6 +3,11 @@ var gbuf_tex: texture_2d<f32>;
 @group(0) @binding(1)
 var gbuf_samp: sampler;
 
+@group(1) @binding(0)
+var<uniform> t: f32;
+
+const PI: f32 = 3.14159;
+
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -38,17 +43,27 @@ fn distort_uv(in_uv: vec2<f32>) -> vec2<f32> {
     return uv;
 }
 
-fn scanline_coef(coord: f32, resolution: f32) -> f32 {
-    let opacity = 0.3;
+fn scanline_coef(uv: vec2<f32>, y_resolution: f32) -> f32 {
+    // slightly higher opacity patterns moving in waves along the edges
+    let x_modulator = 4. * pow(uv.x - 0.5, 2.);
+    let opacity = 0.3 + 0.5 * x_modulator * sin(PI * t + uv.y * PI * 8.);
     return pow(
-	(0.5 * sin(coord * resolution * 3.14159 * 2.) + 0.5) * 0.9 + 0.1,
+	(0.5 * sin(uv.y * y_resolution * PI * 2.) + 0.5) * 0.9 + 0.1,
 	opacity
     );
 }
 
 fn vignette_coef(uv: vec2<f32>, screen_size: vec2<f32>) -> f32 {
     let intensity = (screen_size.x / 16.0) * uv.x * uv.y * (1. - uv.x) * (1. - uv.y);
-    return clamp(intensity, 0., 1.);
+    return saturate(intensity);
+}
+
+fn noise(x: vec2<f32>) -> f32 {
+    return fract(sin(dot(x, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+}
+
+fn noise_1d(x: f32) -> f32 {
+    return noise(vec2<f32>(x, 0.));
 }
 
 @fragment
@@ -59,7 +74,12 @@ fn fs_main(
     let distorted_uv = distort_uv(in.uv);
 
     // different channels offset slightly for chromatic aberration
-    let aberration_intensity = 0.001;
+    // plus a "glitch" effect randomly every now and then for funsies
+    let aberration_intensity = select(
+	0.0008 + 0.0003 * pow(sin(t * PI / 4.), 2.),
+	0.002,
+	noise_1d(round(10. * t)) < 0.05,
+    );
     let red_uv = distorted_uv + aberration_intensity * vec2<f32>(1., 0.);
     let green_uv = distorted_uv + aberration_intensity * vec2<f32>(-0.8, 0.6);
     let blue_uv = distorted_uv + aberration_intensity * vec2<f32>(-0.8, -0.6);
@@ -75,9 +95,9 @@ fn fs_main(
 	return vec4<f32>(0., 0., 0., 1.);
     }
 
-    let scanline = scanline_coef(distorted_uv.y, screen_size.y / 8.);
+    let scanline = scanline_coef(distorted_uv, screen_size.y / 8.);
     let vignette = vignette_coef(in.uv, screen_size);
-    let brightness_boost = 1.5;
+    let brightness_boost = 1.5 + 0.1 * noise_1d(round(20. * t));
 
     let dimmed_color = vec4<f32>(brightness_boost * scanline * vignette * screen_color.rgb, 1.);
     return dimmed_color;

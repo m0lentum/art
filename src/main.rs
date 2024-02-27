@@ -252,6 +252,7 @@ fn main() -> anyhow::Result<()> {
                 // draw
 
                 let t = start_t.elapsed().as_secs_f32();
+                postprocess_pl.upload_time(&queue, t);
 
                 if fire_updated {
                     fire.write_texture(&queue, &fire_tex);
@@ -295,6 +296,7 @@ fn main() -> anyhow::Result<()> {
 
                 postprocess_pass.set_pipeline(&postprocess_pl.pipeline);
                 postprocess_pass.set_bind_group(0, &gbuf_bind_group, &[]);
+                postprocess_pass.set_bind_group(1, &postprocess_pl.time_bind_group, &[]);
                 postprocess_pass.draw(0..3, 0..1);
 
                 // finalize

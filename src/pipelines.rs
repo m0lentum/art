@@ -229,49 +229,82 @@ impl VertexColorPipeline {
 
 pub struct PostprocessPipeline {
     pub pipeline: wgpu::RenderPipeline,
-    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub gbuf_bind_group_layout: wgpu::BindGroupLayout,
+    pub time_buffer: wgpu::Buffer,
+    pub time_bind_group: wgpu::BindGroup,
 }
 
 impl PostprocessPipeline {
     pub fn new(device: &wgpu::Device) -> Self {
-        let label = Some("postprocess");
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label,
+            label: Some("postprocess"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
                 "./shaders/postprocess.wgsl"
             ))),
         });
 
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label,
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
+        let gbuf_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("postprocess gbuffer binding"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+
+        let time_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("global time"),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+            size: 4,
+            mapped_at_creation: false,
+        });
+
+        let time_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("postprocess uniforms"),
+                entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        min_binding_size: wgpu::BufferSize::new(4),
+                        has_dynamic_offset: false,
                     },
                     count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
+                }],
+            });
+
+        let time_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("postprocess uniforms"),
+            layout: &time_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(time_buffer.as_entire_buffer_binding()),
+            }],
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label,
-            bind_group_layouts: &[&bind_group_layout],
+            label: Some("postprocess"),
+            bind_group_layouts: &[&gbuf_bind_group_layout, &time_bind_group_layout],
             push_constant_ranges: &[],
         });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label,
+            label: Some("postprocess"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -304,8 +337,14 @@ impl PostprocessPipeline {
 
         Self {
             pipeline,
-            bind_group_layout,
+            gbuf_bind_group_layout,
+            time_buffer,
+            time_bind_group,
         }
+    }
+
+    pub fn upload_time(&self, queue: &wgpu::Queue, t: f32) {
+        queue.write_buffer(&self.time_buffer, 0, bytemuck::cast_slice(&[t]));
     }
 
     /// Create a bind group with a texture and a sampler
@@ -318,7 +357,7 @@ impl PostprocessPipeline {
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &self.bind_group_layout,
+            layout: &self.gbuf_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
