@@ -39,8 +39,8 @@ fn main() -> anyhow::Result<()> {
     let window = WindowBuilder::new()
         .with_title("demodemons")
         .with_inner_size(winit::dpi::LogicalSize {
-            width: 1600,
-            height: 1200,
+            width: 1080 * 4 / 3,
+            height: 1080,
         })
         .build(&event_loop)?;
 
