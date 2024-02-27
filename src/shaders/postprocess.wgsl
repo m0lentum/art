@@ -39,7 +39,7 @@ fn distort_uv(in_uv: vec2<f32>) -> vec2<f32> {
 }
 
 fn scanline_coef(coord: f32, resolution: f32) -> f32 {
-    let opacity = 0.5;
+    let opacity = 0.3;
     return pow(
 	(0.5 * sin(coord * resolution * 3.14159 * 2.) + 0.5) * 0.9 + 0.1,
 	opacity
@@ -75,7 +75,7 @@ fn fs_main(
 	return vec4<f32>(0., 0., 0., 1.);
     }
 
-    let scanline = scanline_coef(distorted_uv.y, screen_size.x / 8.);
+    let scanline = scanline_coef(distorted_uv.y, screen_size.y / 8.);
     let vignette = vignette_coef(in.uv, screen_size);
     let brightness_boost = 1.5;
 
