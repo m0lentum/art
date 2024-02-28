@@ -193,6 +193,11 @@ fn main() -> anyhow::Result<()> {
     // run event loop
     //
 
+    // interactive controls to toggle parts of the picture, just for fun
+    let mut draw_characters = true;
+    let mut draw_fire = true;
+    let mut draw_postprocess = true;
+
     // frame timing for the fire simulation
     let mut frame_start_t = Instant::now();
     let mut time_in_frame = 0.;
@@ -240,7 +245,11 @@ fn main() -> anyhow::Result<()> {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: &msaa_view,
-                        resolve_target: Some(&gbuf_view),
+                        resolve_target: Some(if draw_postprocess {
+                            &gbuf_view
+                        } else {
+                            &surface_view
+                        }),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                             store: wgpu::StoreOp::Store,
@@ -266,42 +275,48 @@ fn main() -> anyhow::Result<()> {
 
                 pass.set_pipeline(&tex_pl.pipeline);
 
-                pass.set_bind_group(0, &fire_bind_group, &[]);
-                pass.set_vertex_buffer(0, fire_verts.slice(..));
-                pass.draw(0..6, 0..1);
+                if draw_fire {
+                    pass.set_bind_group(0, &fire_bind_group, &[]);
+                    pass.set_vertex_buffer(0, fire_verts.slice(..));
+                    pass.draw(0..6, 0..1);
 
-                pass.set_bind_group(0, &fire_reflection_bind_group, &[]);
-                pass.set_vertex_buffer(0, fire_reflection_verts.slice(..));
-                pass.draw(0..6, 0..1);
+                    pass.set_bind_group(0, &fire_reflection_bind_group, &[]);
+                    pass.set_vertex_buffer(0, fire_reflection_verts.slice(..));
+                    pass.draw(0..6, 0..1);
+                }
 
-                pass.set_bind_group(0, &characters_bind_group, &[]);
-                pass.set_vertex_buffer(0, characters_verts.slice(..));
-                pass.draw(0..6, 0..1);
-
-                // postprocessing pass
+                if draw_characters {
+                    pass.set_bind_group(0, &characters_bind_group, &[]);
+                    pass.set_vertex_buffer(0, characters_verts.slice(..));
+                    pass.draw(0..6, 0..1);
+                }
 
                 drop(pass);
 
-                let mut postprocess_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &surface_view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    ..Default::default()
-                });
+                // postprocessing pass
 
-                postprocess_pass.set_pipeline(&postprocess_pl.pipeline);
-                postprocess_pass.set_bind_group(0, &gbuf_bind_group, &[]);
-                postprocess_pass.set_bind_group(1, &postprocess_pl.time_bind_group, &[]);
-                postprocess_pass.draw(0..3, 0..1);
+                if draw_postprocess {
+                    let mut postprocess_pass =
+                        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: &surface_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            })],
+                            ..Default::default()
+                        });
+
+                    postprocess_pass.set_pipeline(&postprocess_pl.pipeline);
+                    postprocess_pass.set_bind_group(0, &gbuf_bind_group, &[]);
+                    postprocess_pass.set_bind_group(1, &postprocess_pl.time_bind_group, &[]);
+                    postprocess_pass.draw(0..3, 0..1);
+                }
 
                 // finalize
 
-                drop(postprocess_pass);
                 queue.submit(Some(encoder.finish()));
                 surface_tex.present();
             }
@@ -323,12 +338,27 @@ fn main() -> anyhow::Result<()> {
                     input:
                         winit::event::KeyboardInput {
                             state: winit::event::ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::Q),
+                            virtual_keycode: Some(key),
                             ..
                         },
                     ..
                 } => {
-                    control_flow.set_exit();
+                    use VirtualKeyCode::*;
+                    match key {
+                        Q => {
+                            control_flow.set_exit();
+                        }
+                        F => {
+                            draw_fire = !draw_fire;
+                        }
+                        C => {
+                            draw_characters = !draw_characters;
+                        }
+                        P => {
+                            draw_postprocess = !draw_postprocess;
+                        }
+                        _ => {}
+                    }
                 }
                 _ => {}
             },
