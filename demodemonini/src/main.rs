@@ -56,7 +56,7 @@ async fn main_async() -> anyhow::Result<()> {
     let event_loop = EventLoop::new();
 
     let window = WindowBuilder::new()
-        .with_title("demodemons")
+        .with_title("demodemonini")
         .with_inner_size(winit::dpi::LogicalSize {
             width: 1080 * 4 / 3,
             height: 1080,

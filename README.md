@@ -1,11 +1,29 @@
+# Art
+
+This repo contains the source code of my artworks
+that feature real-time computer graphics.
+For art that is just drawings and no code,
+see [the gallery on my website](https://molentum.me/gallery).
+
+Artworks in reverse chronological order:
+
+## 2024
+
+### Demodemonini
+
+```bash
+cargo run --bin demodemonini
+```
+
 ![Three demonic creatures standing against a background of pixelated fire.
 A small imp in a hoodie holding a keyboard,
 a gorilla-shaped creature with mechanical arm and a CRT television for a head,
 and a horned woman with RGB-lit bat wings wearing VR goggles and a Power Glove.
 Everything is viewed through a distorted filter with a stripey CRT effect and chromatic aberration.
-](demo.gif)
+](previews/demodemonini.gif)
 
-This repo contains the source code for Demodemonini ("my demo demons"),
-my entry for the graphic art compo at [Instanssi](https://instanssi.org/) 2024.
+My entry for the graphic art compo at [Instanssi](https://instanssi.org/) 2024.
 Characters drawn in ink on paper and colored with Krita,
 background and postprocessing effects done with [wgpu](https://wgpu.rs).
+
+[Interactive WebGL build](https://molentum.me/gallery/2024/demodemonini/)
