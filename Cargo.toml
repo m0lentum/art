@@ -16,8 +16,26 @@ lazy_static = "1.4.0"
 palette = "0.7.3"
 png = "0.17.13"
 rand = "0.8.5"
-wgpu = "0.18.0"
+wgpu = { version = "0.18.0", default-features = true }
 winit = "0.28.7"
+instant = { version = "0.1", features = ["wasm-bindgen"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2.87"
+web-sys = { version = "0.3.64" }
+js-sys = "0.3.64"
+wasm-bindgen-futures = "0.4.42"
+console_error_panic_hook = "0.1.7"
+log = "0.4"
+console_log = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.wgpu]
+version = "0.18.0"
+default-features = false
+features = ["webgl", "wgsl"]
 
 [profile.dev]
 opt-level = 2
+
+[workspace]
+members = ["run-wasm"]

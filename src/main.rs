@@ -1,7 +1,5 @@
-use std::time::Instant;
+use instant::Instant;
 
-use anyhow::anyhow;
-use futures::executor::block_on;
 use wgpu::util::DeviceExt;
 use winit::{
     event::{Event, VirtualKeyCode, WindowEvent},
@@ -22,20 +20,41 @@ use triangle_grid::TriangleGrid;
 
 // constants for quick globally accessible configuration
 
+#[cfg(not(target_arch = "wasm32"))]
 const SWAPCHAIN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
-const MSAA_SAMPLES: u32 = 4;
+#[cfg(target_arch = "wasm32")]
+const SWAPCHAIN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+// MSAA doesn't work on webgl, and it doesn't really make a difference in this anyway,
+// so just disable it everywhere
+const MSAA_SAMPLES: u32 = 1;
 const MULTISAMPLE_STATE: wgpu::MultisampleState = wgpu::MultisampleState {
     count: MSAA_SAMPLES,
     mask: !0,
     alpha_to_coverage_enabled: false,
 };
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> anyhow::Result<()> {
+    futures::executor::block_on(main_async())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    wasm_bindgen_futures::spawn_local(main_async_unwrap());
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn main_async_unwrap() {
+    main_async().await.unwrap();
+}
+
+async fn main_async() -> anyhow::Result<()> {
     //
     // winit & wgpu setup
     //
 
     let event_loop = EventLoop::new();
+
     let window = WindowBuilder::new()
         .with_title("demodemons")
         .with_inner_size(winit::dpi::LogicalSize {
@@ -43,25 +62,51 @@ fn main() -> anyhow::Result<()> {
             height: 1080,
         })
         .build(&event_loop)?;
+    #[cfg(target_arch = "wasm32")]
+    {
+        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+        console_log::init().expect("Failed to initialize console logger");
+        use winit::platform::web::WindowExtWebSys;
+        let canvas = web_sys::Element::from(window.canvas());
+        web_sys::window()
+            .and_then(|win| win.document())
+            // made-up convention for putting the game in a specific spot in the DOM
+            .and_then(|doc| match doc.get_element_by_id("wgpu-canvas") {
+                Some(parent) => parent.append_child(&canvas).ok(),
+                None => doc.body().and_then(|body| body.append_child(&canvas).ok()),
+            })
+            .expect("couldn't append canvas to document body")
+    };
 
     let instance = wgpu::Instance::default();
     let surface = unsafe { instance.create_surface(&window)? };
 
-    let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::default(),
-        force_fallback_adapter: false,
-        compatible_surface: Some(&surface),
-    }))
-    .ok_or(anyhow!("Failed to get adapter"))?;
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            force_fallback_adapter: false,
+            compatible_surface: Some(&surface),
+        })
+        .await
+        .ok_or(anyhow::anyhow!("Adapter request failed"))?;
 
-    let (device, queue) = block_on(adapter.request_device(
-        &wgpu::DeviceDescriptor {
-            features: wgpu::Features::empty(),
-            limits: wgpu::Limits::default(),
-            label: None,
-        },
-        None,
-    ))?;
+    #[cfg(not(target_arch = "wasm32"))]
+    let limits = wgpu::Limits::default();
+    #[cfg(target_arch = "wasm32")]
+    let limits = wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits());
+
+    let (device, queue) = adapter
+        .request_device(
+            &wgpu::DeviceDescriptor {
+                features: wgpu::Features::empty(),
+                limits,
+                label: None,
+            },
+            None,
+        )
+        .await
+        // for some reason this map is needed on wasm
+        .map_err(|e| anyhow::anyhow!("Failed to get device: {e}"))?;
 
     let initial_window_size = window.inner_size();
 
@@ -81,7 +126,6 @@ fn main() -> anyhow::Result<()> {
     fn create_screen_texture(
         device: &wgpu::Device,
         window_size: winit::dpi::PhysicalSize<u32>,
-        is_msaa: bool,
     ) -> wgpu::Texture {
         device.create_texture(&wgpu::TextureDescriptor {
             label: None,
@@ -91,7 +135,7 @@ fn main() -> anyhow::Result<()> {
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: if is_msaa { MSAA_SAMPLES } else { 1 },
+            sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: SWAPCHAIN_FORMAT,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -99,10 +143,8 @@ fn main() -> anyhow::Result<()> {
         })
     }
 
-    // multisampled texture
-    let mut msaa_texture = create_screen_texture(&device, initial_window_size, true);
     // main image is draw into a gbuffer for postprocessing
-    let mut gbuffer = create_screen_texture(&device, initial_window_size, false);
+    let mut gbuffer = create_screen_texture(&device, initial_window_size);
 
     //
     // pipelines and textures
@@ -112,7 +154,7 @@ fn main() -> anyhow::Result<()> {
     let mut background_grid = TriangleGrid::generate(&device);
 
     let tex_pl = TexturePipeline::new(&device);
-    let characters_tex = load_png_texture(&device, &queue, "characters.png")?;
+    let characters_tex = load_png_texture(&device, &queue, include_bytes!("../characters.png"))?;
     let characters_tex_view = characters_tex.create_view(&wgpu::TextureViewDescriptor::default());
     let filtering_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         mag_filter: wgpu::FilterMode::Linear,
@@ -235,7 +277,6 @@ fn main() -> anyhow::Result<()> {
                 let surface_view = surface_tex
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
-                let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let gbuf_view = gbuffer.create_view(&wgpu::TextureViewDescriptor::default());
                 let gbuf_bind_group =
                     postprocess_pl.create_bind_group(&device, &gbuf_view, &filtering_sampler);
@@ -244,12 +285,12 @@ fn main() -> anyhow::Result<()> {
 
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &msaa_view,
-                        resolve_target: Some(if draw_postprocess {
+                        view: if draw_postprocess {
                             &gbuf_view
                         } else {
                             &surface_view
-                        }),
+                        },
+                        resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                             store: wgpu::StoreOp::Store,
@@ -331,8 +372,7 @@ fn main() -> anyhow::Result<()> {
                     surface_config.width = new_size.width;
                     surface_config.height = new_size.height;
                     surface.configure(&device, &surface_config);
-                    msaa_texture = create_screen_texture(&device, new_size, true);
-                    gbuffer = create_screen_texture(&device, new_size, false);
+                    gbuffer = create_screen_texture(&device, new_size);
                 }
                 WindowEvent::KeyboardInput {
                     input:

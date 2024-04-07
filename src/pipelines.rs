@@ -5,9 +5,9 @@ use wgpu::util::DeviceExt;
 pub fn load_png_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    path: &str,
+    bytes: &[u8],
 ) -> anyhow::Result<wgpu::Texture> {
-    let decoder = png::Decoder::new(std::fs::File::open(path)?);
+    let decoder = png::Decoder::new(bytes);
     let mut reader = decoder.read_info()?;
     let mut buf = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buf)?;
@@ -269,7 +269,8 @@ impl PostprocessPipeline {
         let time_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("global time"),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
-            size: 4,
+            // on webgl, buffers must be 16 byte aligned
+            size: 16,
             mapped_at_creation: false,
         });
 
@@ -281,7 +282,7 @@ impl PostprocessPipeline {
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
-                        min_binding_size: wgpu::BufferSize::new(4),
+                        min_binding_size: wgpu::BufferSize::new(16),
                         has_dynamic_offset: false,
                     },
                     count: None,
@@ -344,7 +345,8 @@ impl PostprocessPipeline {
     }
 
     pub fn upload_time(&self, queue: &wgpu::Queue, t: f32) {
-        queue.write_buffer(&self.time_buffer, 0, bytemuck::cast_slice(&[t]));
+        // pad to 16 bytes
+        queue.write_buffer(&self.time_buffer, 0, bytemuck::cast_slice(&[t, 0., 0., 0.]));
     }
 
     /// Create a bind group with a texture and a sampler

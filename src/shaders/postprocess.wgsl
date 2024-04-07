@@ -3,8 +3,13 @@ var gbuf_tex: texture_2d<f32>;
 @group(0) @binding(1)
 var gbuf_samp: sampler;
 
+struct Uniforms {
+    @align(16)
+    t: f32,
+}
+
 @group(1) @binding(0)
-var<uniform> t: f32;
+var<uniform> unif: Uniforms;
 
 const PI: f32 = 3.14159;
 
@@ -46,7 +51,7 @@ fn distort_uv(in_uv: vec2<f32>) -> vec2<f32> {
 fn scanline_coef(uv: vec2<f32>, y_resolution: f32) -> f32 {
     // slightly higher opacity patterns moving in waves along the edges
     let x_modulator = 4. * pow(uv.x - 0.5, 2.);
-    let opacity = 0.3 + 0.5 * x_modulator * sin(PI * t + uv.y * PI * 8.);
+    let opacity = 0.3 + 0.5 * x_modulator * sin(PI * unif.t + uv.y * PI * 8.);
     return pow(
 	(0.5 * sin(uv.y * y_resolution * PI * 2.) + 0.5) * 0.9 + 0.1,
 	opacity
@@ -70,6 +75,7 @@ fn noise_1d(x: f32) -> f32 {
 fn fs_main(
     in: VertexOutput
 ) -> @location(0) vec4<f32> {
+    let t = unif.t;
     let screen_size = vec2<f32>(textureDimensions(gbuf_tex));
     let distorted_uv = distort_uv(in.uv);
 
