@@ -135,28 +135,26 @@ impl sf::GameState for State {
         // because I can't be bothered to adjust it in blender
         game.graphics.update_animations(0.5 * dt);
 
-        let mut ctx = game.renderer.begin_frame();
+        let mut deferred = game.renderer.begin_frame();
         {
-            let mut pass = ctx.pass();
+            let mut pass = deferred.pass();
             self.mesh_renderer
                 .draw(&mut pass, &mut game.graphics, &mut game.world, &self.camera);
         }
 
-        let mut ctx = ctx.shade(
-            [0., 0., 0., 1.],
-            &self.camera,
-            sf::DirectionalLight::default(),
-            self.particles.iter().map(|p| sf::PointLight {
-                position: p.position,
-                color: p.light_color,
-                radius: 3.,
-                ..Default::default()
-            }),
-        );
+        let mut shade = deferred.shade();
+        shade.set_fullbright();
+        shade.extend_point_lights(self.particles.iter().map(|p| sf::PointLight {
+            position: p.position,
+            color: p.light_color,
+            radius: 3.,
+            ..Default::default()
+        }));
+        let mut forward = shade.finish(&self.camera);
 
         // particle trails
         {
-            let mut pass = ctx.pass();
+            let mut pass = forward.pass();
             for particle in &self.particles {
                 self.line_renderer.draw(
                     &mut pass,
