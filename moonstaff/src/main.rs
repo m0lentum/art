@@ -35,6 +35,7 @@ pub struct State {
     line_renderer: sf::LineRenderer,
 
     particles: Vec<Particle>,
+    particle_material: sf::MaterialId,
 }
 
 impl sf::GameState for State {
@@ -67,6 +68,8 @@ impl sf::GameState for State {
             ));
         }
 
+        // start animations
+
         for anim_name in [
             "moonstaff.clouds_front_sway",
             "moonstaff.clouds_mid_sway",
@@ -77,6 +80,37 @@ impl sf::GameState for State {
             ));
         }
 
+        // particle texture
+
+        const TEX_HEIGHT: u32 = 16;
+        let line_tex_pixels: Vec<u8> = (0..TEX_HEIGHT)
+            .flat_map(|i| {
+                // white streak with a blue glow:
+                // alpha goes from 0 on the sides to 1 in the middle;
+                // channels other than blue do the same,
+                let x = i as f32 / TEX_HEIGHT as f32;
+                let curve = (2. * (x - 0.5)).powi(2);
+                let alpha = ((1. - curve) * 255.) as u8;
+                let rg = ((1. - 0.5 * curve) * 255.) as u8;
+                [rg, rg, 255, alpha]
+            })
+            .collect();
+        let line_tex_data = sf::TextureData {
+            label: Some("particle".to_string()),
+            format: sf::wgpu::TextureFormat::Rgba8UnormSrgb,
+            dimensions: (1, TEX_HEIGHT),
+            pixels: &line_tex_pixels,
+        };
+        let particle_material = game.graphics.create_material(
+            sf::MaterialParams {
+                diffuse_tex: Some(line_tex_data),
+                ..Default::default()
+            },
+            None,
+        );
+
+        // camera
+
         let mut camera = sf::Camera::new();
         camera.view_width = 1.56;
         camera.view_height = 0.96;
@@ -86,6 +120,7 @@ impl sf::GameState for State {
             mesh_renderer: sf::MeshRenderer::new(game),
             line_renderer: sf::LineRenderer::new(game),
             particles: Vec::new(),
+            particle_material,
         }
     }
 
@@ -102,7 +137,7 @@ impl sf::GameState for State {
                 .camera
                 .point_screen_to_world(game.input.cursor_position());
             let pos = sf::Vec3::new(xy.x, xy.y, 30.);
-            let particle = Particle::new(pos);
+            let particle = Particle::new(pos, self.particle_material);
             self.particles.push(particle);
         }
 
@@ -117,7 +152,8 @@ impl sf::GameState for State {
                 MOON_POS.y + radius * angle.sin(),
                 MOON_POS.z,
             );
-            self.particles.push(Particle::new(pos));
+            self.particles
+                .push(Particle::new(pos, self.particle_material));
         }
 
         // simulate particles

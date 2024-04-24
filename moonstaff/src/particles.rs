@@ -9,10 +9,8 @@ const TARGET_POS: sf::Vec3 = sf::Vec3::new(0.012096, 0.095921, -0.1);
 const GRAVITY_STRENGTH: f32 = 10000.;
 const MAX_SPEED: f32 = 10.;
 const ORBIT_DISTANCE: f32 = 0.25;
-const ORBIT_DROP_SPEED: f32 = 0.2;
-const ORBIT_TWIST_SPEED: f32 = 0.05;
-const ORBIT_DAMPING: f32 = 0.98;
-const DESTROY_ORBIT_TIME: f32 = 1.5;
+const ORBIT_TIME: f32 = 0.5;
+const ORBIT_CONTROL_DISTANCE: f32 = 0.05;
 
 pub struct Particle {
     pub position: sf::Vec3,
@@ -20,19 +18,29 @@ pub struct Particle {
     pub light_color: [f32; 3],
     pub trail_width: f32,
     pub trail_length: usize,
-    pub trail_positions: VecDeque<sf::Vec3>,
+    pub trail_points: VecDeque<sf::LineVertex>,
     pub trail_strip: sf::LineStrip,
-    pub orbit_time: f32,
+    pub end: Option<EndPath>,
+}
+
+// when the particles get close enough they change
+// from gravity to a bezier curve ending in the staff
+pub struct EndPath {
+    start: sf::Vec3,
+    control1: sf::Vec3,
+    control2: sf::Vec3,
+    t: f32,
 }
 
 impl Particle {
-    pub fn new(position: sf::Vec3) -> Self {
+    pub fn new(position: sf::Vec3, material: sf::MaterialId) -> Self {
         let mut rng = rand::thread_rng();
         let trail_length = rng.gen_range(80..160);
         let trail_width = rng.gen_range(0.005..0.015);
 
         let mut trail_positions = VecDeque::with_capacity(trail_length);
-        trail_positions.push_front(position);
+        let first_point = Self::point_to_line_vertex(position, trail_width);
+        trail_positions.push_front(first_point);
 
         // starting velocity that pushes away from the moon's center for a nice curving effect
         let dist = position - super::MOON_POS;
@@ -46,16 +54,11 @@ impl Particle {
             light_color,
             trail_width,
             trail_length,
-            trail_positions,
-            // write some nonsense placeholder points, we'll overwrite this before we draw
-            trail_strip: sf::LineStrip::new(
-                &[
-                    Self::point_to_line_vertex(position, 1.),
-                    Self::point_to_line_vertex(position, 1.),
-                ],
-                None,
-            ),
-            orbit_time: 0.,
+            trail_points: trail_positions,
+            // write some placeholder points because lines need to have at least two,
+            // we'll overwrite this before we draw
+            trail_strip: sf::LineStrip::new(&[first_point, first_point], Some(material)),
+            end: None,
         }
     }
 
@@ -65,74 +68,87 @@ impl Particle {
     fn point_to_line_vertex(p: sf::Vec3, base_width: f32) -> sf::LineVertex {
         sf::LineVertex {
             position: p,
-            width: base_width / f32::max(0.5, (p.z + 1.) / 2.),
+            width: base_width / f32::max(1., (p.z + 2.) / 2.),
         }
     }
 
     /// Apply gravity, move the particle, update the trail
     pub fn tick(&mut self, dt: f32) {
-        // apply gravity as per newton's law F = Gm_1m_2/r^2
-        // (disregarding masses and going directly to acceleration;
-        // GRAVITY_CONSTANT = G * m_1)
-        let dist = self.position - TARGET_POS;
-        let dist_sq = dist.mag_sq();
-        if self.orbit_time == 0. && dist_sq > ORBIT_DISTANCE.powi(2) {
-            // falling
-            let grav_accel = GRAVITY_STRENGTH / dist_sq;
-            self.velocity -= dt.powi(2) * grav_accel * dist.normalized();
-        } else {
-            // orbiting
-            let orbit_normal = dist.normalized();
-            // cancel velocity away from the target
-            self.velocity -= orbit_normal * self.velocity.dot(orbit_normal);
-            // fall towards the target
-            self.velocity -= ORBIT_DROP_SPEED * orbit_normal;
-            // also twist a little to the side and apply damping
-            let side_dir = orbit_normal.cross(self.velocity).normalized();
-            self.velocity += ORBIT_TWIST_SPEED * side_dir;
-            self.velocity *= ORBIT_DAMPING;
-
-            self.orbit_time += dt;
-        }
-
-        let speed = self.velocity.mag();
-        if speed > MAX_SPEED {
-            self.velocity *= MAX_SPEED / speed;
-        }
-
-        // move the particle and update the trail
-        self.position += dt * self.velocity;
-
-        // if we're past the time to destroy,
-        // don't push a new position, pop a couple off the back to gradually remove the trail
-        if self.orbit_time >= DESTROY_ORBIT_TIME {
-            self.trail_positions.pop_back();
-            self.trail_positions.pop_back();
-        } else {
-            // normal handling of the trail
-            if self.trail_positions.len() >= self.trail_length {
-                self.trail_positions.pop_back();
+        if let Some(end) = &mut self.end {
+            if end.t < 1. {
+                end.t += dt / ORBIT_TIME;
+                // bezier curve as repeated linear interpolation
+                let lerp = |a: sf::Vec3, b: sf::Vec3| -> sf::Vec3 { a + end.t * (b - a) };
+                self.position = lerp(
+                    lerp(
+                        lerp(end.start, end.control1),
+                        lerp(end.control1, end.control2),
+                    ),
+                    lerp(
+                        lerp(end.control1, end.control2),
+                        lerp(end.control2, TARGET_POS),
+                    ),
+                );
+                self.trail_points.pop_back();
+                self.trail_points.push_front(sf::LineVertex {
+                    position: self.position,
+                    width: self.trail_width * (1. - end.t.powi(4)).max(0.05),
+                });
+            } else {
+                // we've reached the end, remove particles (at an accelerated rate) until the trail is gone
+                self.trail_points.pop_back();
+                self.trail_points.pop_back();
             }
-            self.trail_positions.push_front(self.position);
+        } else {
+            // apply gravity as per newton's law F = Gm_1m_2/r^2
+            // (disregarding masses and going directly to acceleration;
+            // GRAVITY_CONSTANT = G * m_1)
+            let dist = self.position - TARGET_POS;
+            let dist_sq = dist.mag_sq();
+            if dist_sq > ORBIT_DISTANCE.powi(2) {
+                // falling
+                let grav_accel = GRAVITY_STRENGTH / dist_sq;
+                self.velocity -= dt.powi(2) * grav_accel * dist.normalized();
+
+                let speed = self.velocity.mag();
+                if speed > MAX_SPEED {
+                    self.velocity *= MAX_SPEED / speed;
+                }
+
+                self.position += dt * self.velocity;
+
+                if self.trail_points.len() >= self.trail_length {
+                    self.trail_points.pop_back();
+                }
+                self.trail_points
+                    .push_front(Self::point_to_line_vertex(self.position, self.trail_width));
+            } else {
+                // reached the end zone, generate bezier path to the end
+                let control1 = self.position + ORBIT_CONTROL_DISTANCE * self.velocity;
+                let control2 =
+                    control1 + ORBIT_CONTROL_DISTANCE * self.velocity.cross(sf::Vec3::unit_z());
+                self.end = Some(EndPath {
+                    start: self.position,
+                    control1,
+                    control2,
+                    t: 0.,
+                });
+            }
         }
 
-        if self.trail_positions.len() >= 2 {
+        if self.trail_points.len() >= 2 {
             self.update_trail();
         }
     }
 
     /// Push trail vertices to the GPU.
     fn update_trail(&mut self) {
-        let vertices: Vec<sf::LineVertex> = self
-            .trail_positions
-            .iter()
-            .map(|p| Self::point_to_line_vertex(*p, self.trail_width))
-            .collect();
+        let vertices: Vec<sf::LineVertex> = self.trail_points.iter().cloned().collect();
         self.trail_strip.overwrite(&vertices);
     }
 
     /// Destroy particles that have reached the staff and had their trails fully consumed.
     pub fn remove_completed(particles: &mut Vec<Self>) {
-        particles.retain(|p| !p.trail_positions.is_empty());
+        particles.retain(|p| !p.trail_points.is_empty());
     }
 }
