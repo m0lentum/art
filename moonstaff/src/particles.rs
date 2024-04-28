@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use rand::Rng;
+use rand::{seq::SliceRandom, Rng};
 use starframe as sf;
 
 // particles gravitate towards the staff the character is holding,
@@ -15,6 +15,7 @@ const ORBIT_CONTROL_DISTANCE: f32 = 0.05;
 pub struct Particle {
     pub position: sf::Vec3,
     pub velocity: sf::Vec3,
+    pub target: sf::Vec3,
     pub light_color: [f32; 3],
     pub trail_width: f32,
     pub trail_length: usize,
@@ -47,10 +48,17 @@ impl Particle {
         let normal_vel = rng.gen_range(0.1..0.3);
         let velocity = normal_vel * dist + sf::Vec3::new(0., 0., -5.);
 
+        // offset target from the staff position by a random amount
+        let to_angle = rng.gen_range(0.0..std::f32::consts::TAU);
+        let to_dist = rng.gen_range(0.02..0.1);
+        let target_offset = to_dist * sf::Vec3::new(to_angle.cos(), to_angle.sin(), 0.);
+        let target = TARGET_POS + target_offset;
+
         let light_color = [0.2, 0.2, rng.gen_range(0.3..0.4)];
         Self {
             position,
             velocity,
+            target,
             light_color,
             trail_width,
             trail_length,
@@ -74,6 +82,7 @@ impl Particle {
 
     /// Apply gravity, move the particle, update the trail
     pub fn tick(&mut self, dt: f32) {
+        let mut rng = rand::thread_rng();
         if let Some(end) = &mut self.end {
             if end.t < 1. {
                 end.t += dt / ORBIT_TIME;
@@ -103,7 +112,7 @@ impl Particle {
             // apply gravity as per newton's law F = Gm_1m_2/r^2
             // (disregarding masses and going directly to acceleration;
             // GRAVITY_CONSTANT = G * m_1)
-            let dist = self.position - TARGET_POS;
+            let dist = self.position - self.target;
             let dist_sq = dist.mag_sq();
             if dist_sq > ORBIT_DISTANCE.powi(2) {
                 // falling
@@ -125,8 +134,9 @@ impl Particle {
             } else {
                 // reached the end zone, generate bezier path to the end
                 let control1 = self.position + ORBIT_CONTROL_DISTANCE * self.velocity;
-                let control2 =
-                    control1 + ORBIT_CONTROL_DISTANCE * self.velocity.cross(sf::Vec3::unit_z());
+                let turn_dir = [1., -1.].choose(&mut rng).unwrap();
+                let control2 = control1
+                    + turn_dir * ORBIT_CONTROL_DISTANCE * self.velocity.cross(sf::Vec3::unit_z());
                 self.end = Some(EndPath {
                     start: self.position,
                     control1,

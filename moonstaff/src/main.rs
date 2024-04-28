@@ -58,8 +58,8 @@ impl sf::GameState for State {
             ("moonstaff.clouds_back", [0.6932588, 0.17770857, 30.]),
             ("moonstaff.clouds_mid", [0.6762213, 0.29390264, 30.]),
             ("moonstaff.clouds_front", [-0.65202147, 0.449862, 30.]),
-            ("moonstaff.staffbg", [0.012096, 0.095921, 0.1]),
-            ("moonstaff.staffmoon", [0.009397, 0.093279, 0.05]),
+            ("moonstaff.staffbg", [0.012096, 0.095921, 0.01]),
+            ("moonstaff.staffmoon", [0.009397, 0.093279, 0.0001]),
         ] {
             game.world.spawn((
                 sf::Pose::new(sf::Vec2::new(pos[0], pos[1]), sf::Angle::default())
@@ -90,9 +90,10 @@ impl sf::GameState for State {
                 // channels other than blue do the same,
                 let x = i as f32 / TEX_HEIGHT as f32;
                 let curve = (2. * (x - 0.5)).powi(2);
-                let alpha = ((1. - curve) * 255.) as u8;
-                let rg = ((1. - 0.5 * curve) * 255.) as u8;
-                [rg, rg, 255, alpha]
+                let alpha = ((0.8 - 0.8 * curve) * 255.) as u8;
+                let r = ((1. - 0.5 * curve) * 255.) as u8;
+                let g = ((1. - 0.3 * curve) * 255.) as u8;
+                [r, g, 255, alpha]
             })
             .collect();
         let line_tex_data = sf::TextureData {
