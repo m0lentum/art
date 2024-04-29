@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use rand::{seq::SliceRandom, Rng};
+use rand::Rng;
 use starframe as sf;
 
 // particles gravitate towards the staff the character is holding,
@@ -10,7 +10,7 @@ const GRAVITY_STRENGTH: f32 = 10000.;
 const MAX_SPEED: f32 = 10.;
 const ORBIT_DISTANCE: f32 = 0.25;
 const ORBIT_TIME: f32 = 0.5;
-const ORBIT_CONTROL_DISTANCE: f32 = 0.05;
+const ORBIT_PATH_SIZE: f32 = 0.05;
 
 pub struct Particle {
     pub position: sf::Vec3,
@@ -82,7 +82,6 @@ impl Particle {
 
     /// Apply gravity, move the particle, update the trail
     pub fn tick(&mut self, dt: f32) {
-        let mut rng = rand::thread_rng();
         if let Some(end) = &mut self.end {
             if end.t < 1. {
                 end.t += dt / ORBIT_TIME;
@@ -133,10 +132,18 @@ impl Particle {
                     .push_front(Self::point_to_line_vertex(self.position, self.trail_width));
             } else {
                 // reached the end zone, generate bezier path to the end
-                let control1 = self.position + ORBIT_CONTROL_DISTANCE * self.velocity;
-                let turn_dir = [1., -1.].choose(&mut rng).unwrap();
-                let control2 = control1
-                    + turn_dir * ORBIT_CONTROL_DISTANCE * self.velocity.cross(sf::Vec3::unit_z());
+                let vel_scaled = ORBIT_PATH_SIZE * self.velocity;
+                let control1 = self.position + vel_scaled;
+                // always turn towards the target to avoid loops
+                // (those don't look good with the current line rendering impl)
+                let dir_to_target = TARGET_POS - control1;
+                let vel_turned = sf::Vec3::new(-vel_scaled.y, vel_scaled.x, 0.);
+                let c2_offset = if dir_to_target.dot(vel_turned) > 0. {
+                    vel_turned
+                } else {
+                    -vel_turned
+                };
+                let control2 = control1 + c2_offset;
                 self.end = Some(EndPath {
                     start: self.position,
                     control1,
