@@ -7,6 +7,4 @@ edition = "2021"
 
 [dependencies]
 rand = "0.8.5"
-# path dep for development,
-# TODO: change to a git rev once the project is done
-starframe = { path = "../../starframe" }
+starframe = { git = "https://github.com/m0lentum/starframe", rev = "f95a23a9" }
