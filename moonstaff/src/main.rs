@@ -184,7 +184,8 @@ impl sf::GameState for State {
         shade.extend_point_lights(self.particles.iter().map(|p| sf::PointLight {
             position: p.position,
             color: p.light_color,
-            radius: 3.,
+            // modulate light radius with the same value as line width
+            radius: 3. * Particle::point_to_line_vertex(p.position, 1.).width,
             ..Default::default()
         }));
         let mut forward = shade.finish(&self.camera);

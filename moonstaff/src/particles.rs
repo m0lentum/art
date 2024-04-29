@@ -54,7 +54,7 @@ impl Particle {
         let target_offset = to_dist * sf::Vec3::new(to_angle.cos(), to_angle.sin(), 0.);
         let target = TARGET_POS + target_offset;
 
-        let light_color = [0.2, 0.2, rng.gen_range(0.3..0.4)];
+        let light_color = [0.4, 0.4, rng.gen_range(0.6..0.8)];
         Self {
             position,
             velocity,
@@ -73,7 +73,7 @@ impl Particle {
     /// Generate a line vertex with the given position
     /// and a width modulated by the z coordinate
     /// to create an illusion of depth.
-    fn point_to_line_vertex(p: sf::Vec3, base_width: f32) -> sf::LineVertex {
+    pub fn point_to_line_vertex(p: sf::Vec3, base_width: f32) -> sf::LineVertex {
         sf::LineVertex {
             position: p,
             width: base_width / f32::max(1., (p.z + 2.) / 2.),
