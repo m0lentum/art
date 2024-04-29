@@ -9,6 +9,21 @@ Artworks in reverse chronological order:
 
 ## 2024
 
+### Don't forget to charge your moon staff
+
+```
+cargo run --bin moonstaff
+```
+
+![
+A woman in a long blue dress standing on a mountain cliff,
+surrounded by clouds and lit by a crescent moon.
+She has two pairs of wings on her back and points a staff towards the moon.
+Glowing particles stream from the moon to the staff.
+](previews/moonstaff.gif)
+
+First artwork made using my game engine [Starframe](https://github.com/m0lentum/starframe).
+
 ### Demodemonini
 
 ```bash
