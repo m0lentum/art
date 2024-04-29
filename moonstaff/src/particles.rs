@@ -158,7 +158,11 @@ impl Particle {
     }
 
     /// Destroy particles that have reached the staff and had their trails fully consumed.
-    pub fn remove_completed(particles: &mut Vec<Self>) {
+    ///
+    /// Returns the number of particles removed, used for driving the "charging" animation.
+    pub fn remove_completed(particles: &mut Vec<Self>) -> usize {
+        let len_before = particles.len();
         particles.retain(|p| !p.trail_points.is_empty());
+        len_before - particles.len()
     }
 }

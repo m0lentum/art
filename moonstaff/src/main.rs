@@ -36,6 +36,11 @@ pub struct State {
 
     particles: Vec<Particle>,
     particle_material: sf::MaterialId,
+    // moon mesh gets modified at runtime
+    moon_mesh_id: sf::MeshId,
+    particles_completed: usize,
+
+    global_time: f32,
 }
 
 impl sf::GameState for State {
@@ -67,6 +72,7 @@ impl sf::GameState for State {
                 game.graphics.get_mesh_id(name).unwrap(),
             ));
         }
+        let moon_mesh_id = game.graphics.get_mesh_id("moonstaff.staffmoon").unwrap();
 
         // start animations
 
@@ -122,6 +128,9 @@ impl sf::GameState for State {
             line_renderer: sf::LineRenderer::new(game),
             particles: Vec::new(),
             particle_material,
+            moon_mesh_id,
+            particles_completed: 0,
+            global_time: 0.,
         }
     }
 
@@ -129,6 +138,8 @@ impl sf::GameState for State {
         if game.input.button(sf::Key::Q.into()) {
             return None;
         }
+
+        self.global_time += game.dt_fixed as f32;
 
         let mut rng = rand::thread_rng();
 
@@ -158,10 +169,45 @@ impl sf::GameState for State {
         }
 
         // simulate particles
+
         for particle in &mut self.particles {
             particle.tick(game.dt_fixed as f32);
         }
-        Particle::remove_completed(&mut self.particles);
+        self.particles_completed += Particle::remove_completed(&mut self.particles);
+
+        // update staff background
+
+        // the background mesh is a square of this radius
+        const BG_SIZE: f32 = 0.02878;
+        let bg_mesh = game.graphics.get_mesh(&self.moon_mesh_id).unwrap();
+
+        const FULL_CHARGE_PARTICLES: usize = 100;
+        let curr_level = (self.particles_completed % FULL_CHARGE_PARTICLES) as f32
+            / FULL_CHARGE_PARTICLES as f32;
+        // the coefficients make it start with a bit of "charge" already in
+        let level_y = -0.5 * BG_SIZE + curr_level * 1.5 * BG_SIZE;
+        let uv_y = 0.75 * (1. - curr_level);
+        // make the top surface wave a little
+        // to make it look like a liquid substance being filled in
+        let wave_offset = 0.002 * self.global_time.sin();
+        bg_mesh.overwrite(&[
+            sf::MeshVertex {
+                position: sf::Vec3::new(-BG_SIZE, -BG_SIZE, 0.).into(),
+                tex_coords: sf::Vec2::new(0., 1.).into(),
+            },
+            sf::MeshVertex {
+                position: sf::Vec3::new(BG_SIZE, -BG_SIZE, 0.).into(),
+                tex_coords: sf::Vec2::new(1., 1.).into(),
+            },
+            sf::MeshVertex {
+                position: sf::Vec3::new(-BG_SIZE, level_y - wave_offset, 0.).into(),
+                tex_coords: sf::Vec2::new(0., uv_y).into(),
+            },
+            sf::MeshVertex {
+                position: sf::Vec3::new(BG_SIZE, level_y + wave_offset, 0.).into(),
+                tex_coords: sf::Vec2::new(1., uv_y).into(),
+            },
+        ]);
 
         Some(())
     }
