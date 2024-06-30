@@ -7,4 +7,6 @@ edition = "2021"
 
 [dependencies]
 rand = "0.8.5"
-starframe = { git = "https://github.com/m0lentum/starframe", rev = "f95a23a9" }
+starframe = { git = "https://github.com/m0lentum/starframe", rev = "f2561524" }
+# for dev:
+# starframe = { path = "../../starframe" }

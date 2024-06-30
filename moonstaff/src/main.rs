@@ -31,8 +31,6 @@ pub const MOON_RADIUS: f32 = 0.28;
 
 pub struct State {
     camera: sf::Camera,
-    mesh_renderer: sf::MeshRenderer,
-    line_renderer: sf::LineRenderer,
 
     particles: Vec<Particle>,
     particle_material: sf::MaterialId,
@@ -61,8 +59,8 @@ impl sf::GameState for State {
             // to show up in the right spot.
             // this is a Starframe bug, figure it out
             ("moonstaff.clouds_back", [0.6932588, 0.17770857, 30.]),
-            ("moonstaff.clouds_mid", [0.6762213, 0.29390264, 30.]),
-            ("moonstaff.clouds_front", [-0.65202147, 0.449862, 30.]),
+            ("moonstaff.clouds_mid", [0.6762213, 0.29390264, 29.9]),
+            ("moonstaff.clouds_front", [-0.65202147, 0.449862, 29.8]),
             ("moonstaff.staffbg", [0.012096, 0.095921, 0.01]),
             ("moonstaff.staffmoon", [0.009397, 0.093279, 0.0001]),
         ] {
@@ -124,8 +122,6 @@ impl sf::GameState for State {
 
         Self {
             camera,
-            mesh_renderer: sf::MeshRenderer::new(game),
-            line_renderer: sf::LineRenderer::new(game),
             particles: Vec::new(),
             particle_material,
             moon_mesh_id,
@@ -194,18 +190,22 @@ impl sf::GameState for State {
             sf::MeshVertex {
                 position: sf::Vec3::new(-BG_SIZE, -BG_SIZE, 0.).into(),
                 tex_coords: sf::Vec2::new(0., 1.).into(),
+                ..Default::default()
             },
             sf::MeshVertex {
                 position: sf::Vec3::new(BG_SIZE, -BG_SIZE, 0.).into(),
                 tex_coords: sf::Vec2::new(1., 1.).into(),
+                ..Default::default()
             },
             sf::MeshVertex {
                 position: sf::Vec3::new(-BG_SIZE, level_y - wave_offset, 0.).into(),
                 tex_coords: sf::Vec2::new(0., uv_y).into(),
+                ..Default::default()
             },
             sf::MeshVertex {
                 position: sf::Vec3::new(BG_SIZE, level_y + wave_offset, 0.).into(),
                 tex_coords: sf::Vec2::new(1., uv_y).into(),
+                ..Default::default()
             },
         ]);
 
@@ -218,35 +218,23 @@ impl sf::GameState for State {
         // because I can't be bothered to adjust it in blender
         game.graphics.update_animations(0.5 * dt);
 
-        let mut deferred = game.renderer.begin_frame();
-        {
-            let mut pass = deferred.pass();
-            self.mesh_renderer
-                .draw(&mut pass, &mut game.graphics, &mut game.world, &self.camera);
-        }
+        let mut frame = game.renderer.begin_frame();
 
-        let mut shade = deferred.shade();
-        shade.set_fullbright();
-        shade.extend_point_lights(self.particles.iter().map(|p| sf::PointLight {
+        frame.set_ambient_light([1.; 3]);
+        frame.extend_point_lights(self.particles.iter().map(|p| sf::PointLight {
             position: p.position,
             color: p.light_color,
             // modulate light radius with the same value as line width
             radius: 3. * Particle::point_to_line_vertex(p.position, 1.).width,
             ..Default::default()
         }));
-        let mut forward = shade.finish(&self.camera);
+        frame.draw_meshes(&mut game.graphics, &mut game.world, &self.camera);
 
         // particle trails
-        {
-            let mut pass = forward.pass();
-            for particle in &self.particles {
-                self.line_renderer.draw(
-                    &mut pass,
-                    &self.camera,
-                    &game.graphics,
-                    &particle.trail_strip,
-                );
-            }
-        }
+        frame.draw_lines(
+            &game.graphics,
+            &self.camera,
+            self.particles.iter().map(|p| &p.trail_strip),
+        );
     }
 }

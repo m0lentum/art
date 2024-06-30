@@ -2051,7 +2051,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 [[package]]
 name = "starframe"
 version = "0.1.0"
-source = "git+https://github.com/m0lentum/starframe?rev=f95a23a9#f95a23a9d2bc45beb3e73c587b04155b306e8e5c"
+source = "git+https://github.com/m0lentum/starframe?rev=f2561524#f2561524b46172fe8a134de5de37bd0d4f52c9bb"
 dependencies = [
  "console_error_panic_hook",
  "console_log 0.1.2",
