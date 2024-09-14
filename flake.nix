@@ -28,6 +28,7 @@
           # bunch of dynamically linked libs for wgpu
           LD_LIBRARY_PATH = with pkgs.xorg; with pkgs.lib.strings;
             concatStrings (intersperse ":" [
+              "${pkgs.libxkbcommon}/lib"
               "${libXcursor}/lib"
               "${libX11}/lib"
               "${libXxf86vm}/lib"

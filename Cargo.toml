@@ -3,7 +3,7 @@
 # because wgpu 0.18 got yanked and they no longer compile,
 # which prevents working on any other projects too.
 # TODO: upgrade their wgpu version and add them back
-members = ["run-wasm"]
+members = ["run-wasm", "heather"]
 resolver = "2"
 
 [profile.dev]
