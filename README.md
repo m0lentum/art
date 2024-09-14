@@ -5,13 +5,17 @@ that feature real-time computer graphics.
 For art that is just drawings and no code,
 see [the gallery on my website](https://molentum.me/gallery).
 
+Note: these are currently broken as `wgpu` v0.18 has been yanked from crates.io
+and I can't be bothered to upgrade them to a new version.
+Fix forthcoming at some point.
+
 Artworks in reverse chronological order:
 
 ## 2024
 
 ### Don't forget to charge your moon staff
 
-```
+```bash
 cargo run --bin moonstaff
 ```
 
